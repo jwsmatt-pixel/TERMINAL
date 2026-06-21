@@ -1,45 +1,39 @@
-// engine/simClock.js — the MARKET SIM clock (governs price-evolution speed, §5.1/§5.3)
-// Phase 1 provides the cadence + rate. Phase 2's price engine consumes onTick.
-import { SIM_RATES, SIM_TICK_MS } from "../config/constants.js";
+// engine/offlineResolver.js — Phase 1 rules + plumbing ONLY (§5.4)
+// Computes elapsed real time and which zones flipped open/closed while away.
+// Closed markets stay frozen (no price move here). Dividend MATH + the away->return
+// summary are Phase 5: this build only invokes the dividend hook with its inputs.
+import { ZONE_KEYS } from "../config/zones.js";
+import { MarketHours } from "./marketHours.js";
+import { RealClock } from "./realClock.js";
 
-export function createSimClock() {
-  let mode = "idle";
-  let timer = null;
-  let last = Date.now();
+export const OfflineResolver = {
+  resolveOnLoad(savedState, nowMs = Date.now(), dividendHook = () => {}) {
+    const lastTs = typeof savedState.lastSeenTs === "number" ? savedState.lastSeenTs : nowMs;
+    const elapsedMs = Math.max(0, nowMs - lastTs);
+    const zoneTransitions = this.zoneTransitions(lastTs, nowMs);
 
-  return {
-    get mode() { return mode; },
-    get rate() { return SIM_RATES[mode]; },
+    // Phase 5 will compute accrual; we wire the hook with the inputs it needs.
+    dividendHook({ elapsedMs, holdings: savedState.holdings || [] });
 
-    setMode(m) {
-      if (!(m in SIM_RATES)) throw new Error("bad sim mode: " + m);
-      mode = m;
-      return this;
-    },
+    return { elapsedMs, zoneTransitions };
+  },
 
-    // sim-milliseconds advanced for a given real-time delta, at the current rate.
-    simMsFor(realDeltaMs) { return realDeltaMs * SIM_RATES[mode]; },
-
-    start(onTick) {
-      this.stop();
-      last = Date.now();
-      timer = setInterval(() => {
-        const now = Date.now();
-        const realDeltaMs = now - last;
-        last = now;
-        onTick({ realDeltaMs, simMs: realDeltaMs * SIM_RATES[mode], mode });
-      }, SIM_TICK_MS);
-      return this;
-    },
-
-    stop() {
-      if (timer) { clearInterval(timer); timer = null; }
-      return this;
-    },
-
-    get running() { return timer !== null; },
-  };
-}
-
-// Default shared instance (matches the brief's SimClock.* surface).
-export const SimClock = createSimClock();
+  // Sample the away window to detect open<->closed flips per zone.
+  // Step is coarse (15 min) but windows are widened (hours), so flips are caught.
+  zoneTransitions(fromMs, toMs, stepMs = 15 * 60 * 1000) {
+    const out = [];
+    if (toMs <= fromMs) return out;
+    for (const zk of ZONE_KEYS) {
+      let prev = MarketHours.isOpen(zk, RealClock.utcHoursAt(fromMs));
+      for (let t = fromMs + stepMs; t <= toMs; t += stepMs) {
+        const open = MarketHours.isOpen(zk, RealClock.utcHoursAt(t));
+        if (open !== prev) {
+          out.push({ zone: zk, kind: open ? "opened" : "closed", atMs: t });
+          prev = open;
+        }
+      }
+    }
+    out.sort((a, b) => a.atMs - b.atMs);
+    return out;
+  },
+};

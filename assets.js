@@ -1,11 +1,12 @@
-// config/zones.js — canonical exchange zones (widened UTC windows, §5.2/§5.6)
-// openUTC/closeUTC are decimal UTC hours. A window with open>close wraps midnight.
-export const ZONES = {
-  SYDNEY:   { label: "Sydney",   city: "ASX",  openUTC: 22.0, closeUTC: 6.5,  tz: 10 },
-  TOKYO:    { label: "Tokyo",    city: "TSE",  openUTC: 23.0, closeUTC: 7.0,  tz: 9  },
-  HONGKONG: { label: "Hong Kong",city: "HKEX", openUTC: 0.5,  closeUTC: 9.0,  tz: 8  },
-  LONDON:   { label: "London",   city: "LSE",  openUTC: 6.5,  closeUTC: 17.0, tz: 1  },
-  NEWYORK:  { label: "New York", city: "NYSE", openUTC: 12.5, closeUTC: 22.0, tz: -4 },
-};
+// config/constants.js — scalar constants only (no module coupling)
+export const SCHEMA_VERSION = "0.2";
 
-export const ZONE_KEYS = Object.keys(ZONES);
+// Two-clock model (§5.3). SimClock rate by mode. 'idle' is the calm offline/at-rest rate.
+export const SIM_RATES = { active: 60, fastforward: 300, idle: 1 };
+export const SIM_TICK_MS = 300; // cadence the SimClock fires onTick
+
+// Phase-5 reads these; defined here so the contract is stable.
+export const OFFLINE_CRYPTO_DRIFT_PER_HOUR = 0.0; // calm offline crypto drift (Phase 5 fills behaviour)
+
+export const STARTING_CASH = 10000; // §8.1
+export const DEFAULT_HOME_ZONE = "SYDNEY";

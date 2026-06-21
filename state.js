@@ -1,39 +1,42 @@
-// engine/offlineResolver.js — Phase 1 rules + plumbing ONLY (§5.4)
-// Computes elapsed real time and which zones flipped open/closed while away.
-// Closed markets stay frozen (no price move here). Dividend MATH + the away->return
-// summary are Phase 5: this build only invokes the dividend hook with its inputs.
-import { ZONE_KEYS } from "../config/zones.js";
-import { MarketHours } from "./marketHours.js";
+// engine/marketHours.js — open/closed by real time + per-class tradability (§5.2/§5.4)
+import { ZONES, ZONE_KEYS } from "../config/zones.js";
 import { RealClock } from "./realClock.js";
 
-export const OfflineResolver = {
-  resolveOnLoad(savedState, nowMs = Date.now(), dividendHook = () => {}) {
-    const lastTs = typeof savedState.lastSeenTs === "number" ? savedState.lastSeenTs : nowMs;
-    const elapsedMs = Math.max(0, nowMs - lastTs);
-    const zoneTransitions = this.zoneTransitions(lastTs, nowMs);
+// Is `h` inside [open, close)? Handles windows that wrap past midnight.
+function inWindow(open, close, h) {
+  return open < close ? (h >= open && h < close) : (h >= open || h < close);
+}
 
-    // Phase 5 will compute accrual; we wire the hook with the inputs it needs.
-    dividendHook({ elapsedMs, holdings: savedState.holdings || [] });
-
-    return { elapsedMs, zoneTransitions };
+export const MarketHours = {
+  isOpen(zoneKey, h = RealClock.utcHours()) {
+    const z = ZONES[zoneKey];
+    if (!z) return false;
+    return inWindow(z.openUTC, z.closeUTC, h);
   },
 
-  // Sample the away window to detect open<->closed flips per zone.
-  // Step is coarse (15 min) but windows are widened (hours), so flips are caught.
-  zoneTransitions(fromMs, toMs, stepMs = 15 * 60 * 1000) {
-    const out = [];
-    if (toMs <= fromMs) return out;
-    for (const zk of ZONE_KEYS) {
-      let prev = MarketHours.isOpen(zk, RealClock.utcHoursAt(fromMs));
-      for (let t = fromMs + stepMs; t <= toMs; t += stepMs) {
-        const open = MarketHours.isOpen(zk, RealClock.utcHoursAt(t));
-        if (open !== prev) {
-          out.push({ zone: zk, kind: open ? "opened" : "closed", atMs: t });
-          prev = open;
-        }
-      }
+  openZones(h = RealClock.utcHours()) {
+    return ZONE_KEYS.filter(k => this.isOpen(k, h));
+  },
+
+  // Hours until a zone next opens. 0 if currently open.
+  hoursUntilOpen(zoneKey, h = RealClock.utcHours()) {
+    const z = ZONES[zoneKey];
+    if (!z) return Infinity;
+    if (this.isOpen(zoneKey, h)) return 0;
+    let d = z.openUTC - h;
+    if (d < 0) d += 24;
+    return d;
+  },
+
+  // Per-class rules (§5, locked):
+  //  CRYPTO  -> always   RARE -> always (quiet)   GOLD -> LONDON or NEWYORK   BLUECHIP -> its own zone
+  assetTradable(asset, h = RealClock.utcHours()) {
+    switch (asset.cls) {
+      case "CRYPTO": return true;
+      case "RARE":   return true;
+      case "GOLD":   return this.isOpen("LONDON", h) || this.isOpen("NEWYORK", h);
+      case "BLUECHIP": return this.isOpen(asset.zone, h);
+      default: return false;
     }
-    out.sort((a, b) => a.atMs - b.atMs);
-    return out;
   },
 };
