@@ -1,0 +1,29 @@
+// state/state.js — canonical runtime state + pure selectors (§5/§8).
+import { STARTING_CASH, DEFAULT_HOME_ZONE, SCHEMA_VERSION } from "../config/constants.js";
+import { ASSETS } from "../config/assets.js";
+import { rankFor } from "../config/ranks.js";
+
+export function initialState(now = Date.now()) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    homeZone: DEFAULT_HOME_ZONE,
+    lastSeenTs: now,
+    cash: STARTING_CASH,
+    rank: 1,
+    prestige: 0,
+    holdings: [],
+    pendingDiv: 0,
+    unlockedAssets: ASSETS.filter(a => a.unlockRank <= 1).map(a => a.id),
+    unlockedZones: [DEFAULT_HOME_ZONE],
+    achievements: [],
+  };
+}
+
+// netWorth = cash + Σ qty * price. priceLookup(assetId) -> number.
+export function netWorth(state, priceLookup) {
+  let held = 0;
+  for (const h of state.holdings) held += h.qty * (priceLookup(h.assetId) || 0);
+  return state.cash + held;
+}
+
+export { rankFor };

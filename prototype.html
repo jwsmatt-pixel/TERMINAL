@@ -1,0 +1,52 @@
+// state/schema.js — validators are the contract for the QA gate (§4/§8).
+import { ZONE_KEYS } from "../config/zones.js";
+import { SCHEMA_VERSION } from "../config/constants.js";
+
+const CLASSES = ["BLUECHIP", "CRYPTO", "GOLD", "RARE"];
+const ZONE_REFS = [...ZONE_KEYS, "GOLD", "RARE", null]; // asset.zone allowed values
+
+export function validateAsset(a) {
+  const e = [];
+  if (typeof a.id !== "string" || !a.id) e.push("id must be non-empty string");
+  if (typeof a.name !== "string" || !a.name) e.push("name must be non-empty string");
+  if (!CLASSES.includes(a.cls)) e.push("cls must be one of " + CLASSES.join("|"));
+  if (!ZONE_REFS.includes(a.zone)) e.push("zone invalid");
+  if (typeof a.seedPrice !== "number" || a.seedPrice <= 0) e.push("seedPrice must be > 0");
+  if (typeof a.dividendYield !== "number" || a.dividendYield < 0) e.push("dividendYield must be >= 0");
+  if (a.cls !== "BLUECHIP" && a.dividendYield !== 0) e.push("only BLUECHIP may pay a dividend");
+  if (!Number.isInteger(a.unlockRank) || a.unlockRank < 1) e.push("unlockRank must be int >= 1");
+  const allowed = ["id", "name", "cls", "zone", "seedPrice", "dividendYield", "unlockRank"];
+  for (const k in a) if (!allowed.includes(k)) e.push("unknown key: " + k);
+  return { ok: e.length === 0, errors: e };
+}
+
+export function validateHolding(h) {
+  const e = [];
+  if (typeof h.assetId !== "string" || !h.assetId) e.push("assetId must be non-empty string");
+  if (typeof h.qty !== "number" || h.qty < 0) e.push("qty must be >= 0");
+  if (typeof h.avgCost !== "number" || h.avgCost < 0) e.push("avgCost must be >= 0");
+  for (const k in h) if (!["assetId", "qty", "avgCost"].includes(k)) e.push("unknown key: " + k);
+  return { ok: e.length === 0, errors: e };
+}
+
+export function validateSaveState(s) {
+  const e = [];
+  if (s.schemaVersion !== SCHEMA_VERSION) e.push("schemaVersion must be " + SCHEMA_VERSION);
+  if (!ZONE_KEYS.includes(s.homeZone)) e.push("homeZone must be a zone key");
+  if (typeof s.lastSeenTs !== "number") e.push("lastSeenTs must be a number");
+  if (typeof s.cash !== "number" || s.cash < 0) e.push("cash must be >= 0");
+  if (!Number.isInteger(s.rank) || s.rank < 1) e.push("rank must be int >= 1");
+  if (!Number.isInteger(s.prestige) || s.prestige < 0) e.push("prestige must be int >= 0");
+  if (!Array.isArray(s.holdings)) e.push("holdings must be an array");
+  else s.holdings.forEach((h, i) => { const r = validateHolding(h); if (!r.ok) e.push(`holdings[${i}]: ${r.errors.join(", ")}`); });
+  if (typeof s.pendingDiv !== "number" || s.pendingDiv < 0) e.push("pendingDiv must be >= 0");
+  if (!Array.isArray(s.unlockedAssets)) e.push("unlockedAssets must be an array");
+  if (!Array.isArray(s.unlockedZones)) e.push("unlockedZones must be an array");
+  if (!Array.isArray(s.achievements)) e.push("achievements must be an array");
+  const allowed = ["schemaVersion", "homeZone", "lastSeenTs", "cash", "rank", "prestige",
+    "holdings", "pendingDiv", "unlockedAssets", "unlockedZones", "achievements"];
+  for (const k in s) if (!allowed.includes(k)) e.push("unknown key: " + k);
+  return { ok: e.length === 0, errors: e };
+}
+
+export { SCHEMA_VERSION };

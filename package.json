@@ -1,0 +1,93 @@
+// state/save.js — serialize / deserialize / save / load with version migration (§8).
+import { Storage } from "./storage.js";
+import { validateSaveState } from "./schema.js";
+import { SCHEMA_VERSION, DEFAULT_HOME_ZONE, STARTING_CASH } from "../config/constants.js";
+
+const KEY = "terminal.save";
+
+// v0.1 -> v0.2 migration. Additive + lossless. Returns { state, applied: string[] }.
+function migrate(raw) {
+  const applied = [];
+  let s = { ...raw };
+
+  // old { version } -> { schemaVersion }
+  if (s.version && !s.schemaVersion) {
+    s.schemaVersion = s.version === "0.1" ? "0.2" : s.version;
+    delete s.version;
+    applied.push("v0.1→v0.2: version → schemaVersion");
+  }
+  if (s.schemaVersion === "0.1") {
+    s.schemaVersion = "0.2";
+    applied.push("v0.1→v0.2: schemaVersion bump");
+  }
+
+  // old holdings map { id: qty } (+ separate cost map) -> Holding[]
+  if (s.holdings && !Array.isArray(s.holdings)) {
+    s.holdings = Object.entries(s.holdings).map(([assetId, qty]) => ({
+      assetId,
+      qty,
+      avgCost: (s.cost && s.cost[assetId]) || 0,
+    }));
+    delete s.cost;
+    applied.push("v0.1→v0.2: holdings map → array");
+  }
+
+  // fill any newly-required fields with defaults
+  const defaults = {
+    schemaVersion: SCHEMA_VERSION,
+    homeZone: DEFAULT_HOME_ZONE,
+    lastSeenTs: Date.now(),
+    cash: STARTING_CASH,
+    rank: 1,
+    prestige: 0,
+    holdings: [],
+    pendingDiv: 0,
+    unlockedAssets: [],
+    unlockedZones: [DEFAULT_HOME_ZONE],
+    achievements: [],
+  };
+  let filled = false;
+  for (const k in defaults) {
+    if (s[k] === undefined) { s[k] = defaults[k]; filled = true; }
+  }
+  if (filled) applied.push("v0.1→v0.2: filled missing defaults");
+
+  // drop unknown keys (post-migration the shape must validate clean)
+  const allowed = Object.keys(defaults);
+  for (const k of Object.keys(s)) if (!allowed.includes(k)) delete s[k];
+
+  return { state: s, applied };
+}
+
+export const SaveSystem = {
+  SCHEMA_VERSION,
+
+  serialize(state) {
+    const v = validateSaveState(state);
+    if (!v.ok) throw new Error("invalid state: " + v.errors.join("; "));
+    return JSON.stringify(state);
+  },
+
+  deserialize(json) {
+    const raw = JSON.parse(json);
+    const { state, applied } = migrate(raw);
+    const v = validateSaveState(state);
+    if (!v.ok) throw new Error("invalid after migrate: " + v.errors.join("; "));
+    return { state, migrationsApplied: applied };
+  },
+
+  save(state) {
+    Storage.set(KEY, this.serialize(state));
+    return true;
+  },
+
+  load() {
+    const json = Storage.get(KEY);
+    if (!json) return null;
+    return this.deserialize(json).state;
+  },
+
+  migrate(raw) { return migrate(raw); },
+
+  clear() { Storage.remove(KEY); },
+};

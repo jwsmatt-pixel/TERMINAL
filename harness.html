@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TERMINAL — build status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{--grn:#56ff8c;--amb:#ffb000;--dim:#2fae5e;--line:#16331f}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(120% 120% at 50% 0%,#0d120c,#050805 60%,#020302);
+       color:var(--grn);font-family:'VT323',ui-monospace,monospace;display:flex;align-items:center;justify-content:center;padding:24px}
+  .wrap{width:100%;max-width:640px}
+  .brand{font-family:'Press Start 2P';font-size:18px;letter-spacing:2px;color:#c7cba0;text-align:center;text-shadow:0 0 10px rgba(86,255,140,.3)}
+  .tag{text-align:center;color:var(--amb);font-size:18px;margin:6px 0 22px;letter-spacing:1px}
+  .panel{border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.25);padding:18px 20px}
+  .phase{display:flex;justify-content:space-between;align-items:center;font-size:20px;border-bottom:1px dotted var(--line);padding:7px 0}
+  .phase:last-child{border-bottom:none}
+  .phase .n{color:#9cf0bd}
+  .done{color:var(--grn)}.next{color:var(--amb)}.todo{color:var(--dim)}
+  .gate{margin-top:16px;text-align:center;font-size:22px;padding:10px;border:1px solid var(--dim);border-radius:8px}
+  .gate.ok{color:var(--grn);box-shadow:0 0 18px rgba(86,255,140,.25)}
+  .links{display:flex;gap:12px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+  .links a{font-family:'VT323';font-size:19px;color:#050805;background:var(--grn);text-decoration:none;padding:7px 16px;border-radius:5px}
+  .links a.amber{background:var(--amb)}
+  .foot{text-align:center;color:#5c6044;font-size:14px;margin-top:18px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">TERMINAL</div>
+    <div class="tag">a retro global-markets idle terminal</div>
+    <div class="panel">
+      <div class="phase"><span class="n">Phase 0 — Visual identity</span><span class="done">✓ LOCKED</span></div>
+      <div class="phase"><span class="n">Phase 1 — Data model + two-clock engine</span><span class="next">◗ THIS BUILD</span></div>
+      <div class="phase"><span class="n">Phase 2 — Price engine</span><span class="todo">— queued</span></div>
+      <div class="phase"><span class="n">Phase 3 — Terminal shell (UI)</span><span class="todo">— queued</span></div>
+      <div class="phase"><span class="n">Phase 4–8 — trading · passive · meta · juice</span><span class="todo">— queued</span></div>
+      <div class="gate" id="gate">running core diagnostics…</div>
+    </div>
+    <div class="links">
+      <a class="amber" href="./prototype.html">▶ Visual prototype</a>
+      <a href="./dev/harness.html">View full diagnostics</a>
+    </div>
+    <div class="foot">TERMINAL v0.2 · Phase 1 · [Claude] · core runs headless, no backend</div>
+  </div>
+  <script type="module">
+    import { runAll } from "./dev/diagnostics.js";
+    const g = document.getElementById("gate");
+    runAll().then(r => {
+      g.textContent = r.fail === 0 ? `✓ CORE: ALL PASS (${r.pass}/${r.total})` : `✗ ${r.fail} FAILED (${r.pass}/${r.total})`;
+      if (r.fail === 0) g.classList.add("ok");
+    }).catch(() => { g.textContent = "diagnostics need to be served (ES modules) — see README"; });
+  </script>
+</body>
+</html>
